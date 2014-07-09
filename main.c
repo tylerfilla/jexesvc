@@ -16,14 +16,20 @@
 
 #define SERVER_PORT 1337
 
+typedef struct {
+    SOCKET socket;
+    struct sockaddr_in address;
+    int addressStructSize;
+} netnode_t;
+
 VOID  WINAPI ServiceMain(DWORD, LPSTR*);
 VOID  WINAPI ServiceCtrlHandler(DWORD);
 DWORD WINAPI ServiceThread(LPVOID);
 BOOL         updateStatus();
 int          listenLoop();
-void         handleClient();
-char* recvline(SOCKET);
-char* handleClientCommand(char*);
+DWORD WINAPI ClientHandlerThread(LPVOID);
+char*        recvline(SOCKET);
+char*        handleClientCommand(char*);
 
 SERVICE_STATUS        g_ServiceStatus;
 SERVICE_STATUS_HANDLE g_StatusHandle;
@@ -31,7 +37,7 @@ HANDLE                g_ServiceStopEvent;
 
 int runtimeContext;
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
     runtimeContext = RUNTIME_CONTEXT_SERVICE;
     
     SERVICE_TABLE_ENTRY ServiceTableEntry[] = {
@@ -140,18 +146,15 @@ int listenLoop() {
     
     WSADATA wsaData;
     
-    SOCKET socketServer;
-    SOCKET socketClient;
+    netnode_t server;
+    netnode_t client;
     
-    struct sockaddr_in addrServer;
-    struct sockaddr_in addrClient;
+    server.addressStructSize = sizeof(struct sockaddr_in);
+    client.addressStructSize = sizeof(struct sockaddr_in);
     
-    int addrServerSize = sizeof(addrClient);
-    int addrClientSize = sizeof(addrClient);
-    
-    addrServer.sin_addr.s_addr = INADDR_ANY;
-    addrServer.sin_family = AF_INET;
-    addrServer.sin_port = htons(SERVER_PORT);
+    server.address.sin_addr.s_addr = INADDR_ANY;
+    server.address.sin_family = AF_INET;
+    server.address.sin_port = htons(SERVER_PORT);
     
     if (WSAStartup(MAKEWORD(2, 2), &wsaData)) {
         if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
@@ -160,32 +163,31 @@ int listenLoop() {
         return 1;
     }
     
-    if ((socketServer = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
+    if ((server.socket = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
         if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
             printf("Unable to create server socket (Error %d)\n", WSAGetLastError());
             ready = 0;
         }
     }
     
-    if (bind(socketServer, (struct sockaddr*) &addrServer, addrServerSize) == SOCKET_ERROR) {
+    if (bind(server.socket, (struct sockaddr*) &server.address, server.addressStructSize) == SOCKET_ERROR) {
         if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
             printf("Unable to bind server socket (Error %d)\n", WSAGetLastError());
             ready = 0;
         }
     }
     
-    listen(socketServer, 3);
-    
     if (ready) {
+        listen(server.socket, 3);
+        
         if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
             printf("Listening on port %d...\n\n", SERVER_PORT);
         }
         
         while (WaitForSingleObject(g_ServiceStopEvent, 0) != WAIT_OBJECT_0) {
-            socketClient = accept(socketServer, (struct sockaddr*) &addrClient, &addrClientSize);
-            if (socketClient != INVALID_SOCKET) {
-                handleClient(socketClient, &addrClient, &addrClientSize);
-                closesocket(socketClient);
+            client.socket = accept(server.socket, (struct sockaddr*) &client.address, &client.addressStructSize);
+            if (client.socket != INVALID_SOCKET) {
+                CreateThread(NULL, 0, ClientHandlerThread, &client, 0, NULL);
             } else {
                 if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
                     printf("Client socket is invalid\n");
@@ -194,34 +196,41 @@ int listenLoop() {
         }
     }
     
-    closesocket(socketServer);
+    closesocket(server.socket);
     WSACleanup();
     
     return 0;
 }
 
-void handleClient(SOCKET socket, struct sockaddr_in* addr, int* addrSizePtr) {
+DWORD WINAPI ClientHandlerThread(LPVOID lpParam) {
+    netnode_t* client = (netnode_t*) lpParam;
+    
     if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
-        printf("New connection from %s:%d\n\n", inet_ntoa(addr->sin_addr), addr->sin_port);
+        printf("New connection from %s:%d\n\n", inet_ntoa(client->address.sin_addr), client->address.sin_port);
     }
     
     while (1) {
-        char* line = recvline(socket);
+        char* line = recvline(client->socket);
         
         if (line == NULL) {
-            if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
-                printf("Lost connection to %s:%d\n", inet_ntoa(addr->sin_addr), addr->sin_port);
-            }
             break;
         }
         
         char* response = handleClientCommand(line);
         if (response != NULL) {
-            send(socket, response, strlen(response), 0);
+            send(client->socket, response, strlen(response), 0);
         }
         
         free(line);
     }
+    
+    if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
+        printf("Disconnected from %s:%d\n\n", inet_ntoa(client->address.sin_addr), client->address.sin_port);
+    }
+    
+    closesocket(client->socket);
+    
+    return 0;
 }
 
 char* recvline(SOCKET socket) {
