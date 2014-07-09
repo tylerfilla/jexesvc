@@ -22,7 +22,8 @@ DWORD WINAPI ServiceThread(LPVOID);
 BOOL         updateStatus();
 int          listenLoop();
 void         handleClient();
-char* recvline(SOCKET socket);
+char* recvline(SOCKET);
+char* handleClientCommand(char*);
 
 SERVICE_STATUS        g_ServiceStatus;
 SERVICE_STATUS_HANDLE g_StatusHandle;
@@ -199,9 +200,9 @@ int listenLoop() {
     return 0;
 }
 
-void handleClient(SOCKET socket, struct sockaddr_in* addr, int addrSizePtr) {
+void handleClient(SOCKET socket, struct sockaddr_in* addr, int* addrSizePtr) {
     if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
-        printf("New connection from %s:%d\n", inet_ntoa(addr->sin_addr), addr->sin_port);
+        printf("New connection from %s:%d\n\n", inet_ntoa(addr->sin_addr), addr->sin_port);
     }
     
     while (1) {
@@ -214,7 +215,10 @@ void handleClient(SOCKET socket, struct sockaddr_in* addr, int addrSizePtr) {
             break;
         }
         
-        send(socket, line, strlen(line), 0);
+        char* response = handleClientCommand(line);
+        if (response != NULL) {
+            send(socket, response, strlen(response), 0);
+        }
         
         free(line);
     }
@@ -233,7 +237,7 @@ char* recvline(SOCKET socket) {
         int result = recv(socket, buf, 1, 0);
         if (result > 0) {
             c = buf[0];
-            if (c != '\r' && c != '\n' && c != EOF) {
+            if (c != '\n' && c != EOF) {
                 line[i++] = c;
                 if (i == len) {
                     len += lenmax;
@@ -252,4 +256,68 @@ char* recvline(SOCKET socket) {
     }
     
     return line;
+}
+
+char* handleClientCommand(char* command) {
+    char name[32];
+    char args[32][256];
+    
+    memset(name, 0, sizeof(name));
+    memset(args, 0, sizeof(args));
+    
+    int numArgs = 0;
+    
+    int nameIndex = 0;
+    int argsIndex = 0;
+    int argsCharIndex = 0;
+    
+    int stage = 0;
+    int quoted = 0;
+    
+    char c;
+    for (int ci = 0; ci < strlen(command); ci++) {
+        c = command[ci];
+        if (stage == 0) {
+            if (c == ' ' || c == '\t') {
+                stage = 1;
+            } else {
+                name[nameIndex++] = c;
+            }
+        } else if (stage == 1) {
+            if ((c == ' ' || c == '\t') && !quoted) {
+                if (argsCharIndex > 0) {
+                    argsCharIndex = 0;
+                    argsIndex++;
+                    numArgs++;
+                }
+            } else {
+                if (numArgs == 0) {
+                    numArgs = 1;
+                }
+                if (c == '"') {
+                    if (quoted) {
+                        quoted = 0;
+                    } else {
+                        quoted = 1;
+                    }
+                } else {
+                    args[argsIndex][argsCharIndex++] = c;
+                }
+            }
+        }
+    }
+    
+    if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
+        printf("Client issued command: %s\n", command);
+        printf("Command name: %s\n", name);
+        printf("Number of arguments: %d\n", numArgs);
+        
+        for (int i = 0; i < numArgs; i++) {
+            printf("Argument #%d: %s\n", i, args[i]);
+        }
+        
+        printf("\n");
+    }
+    
+    return NULL;
 }
