@@ -273,8 +273,15 @@ char* handleClientCommand(char* command) {
     }
     
     if (!strcmp(name, "exec")) {
+        char* executable = args[0];
+        int interactive = !strcmp(args[1], "i");
+        
+        if (debugMode) {
+            printf("Executing \"%s\" %s interactivity\n\n", executable, (interactive ? "with" : "without"));
+        }
     } else if (!strcmp(name, "kill")) {
-    } else if (!strcmp(name, "query")) {
+    } else if (!strcmp(name, "list")) {
+    } else if (!strcmp(name, "info")) {
     } else if (!strcmp(name, "login")) {
         processLogin.username = args[0];
         processLogin.password = args[1];
@@ -282,6 +289,8 @@ char* handleClientCommand(char* command) {
         if (debugMode) {
             printf("Will start process with user \"%s\" and password \"%s\"\n\n", processLogin.username, processLogin.password);
         }
+        
+        return "OKAY";
     }
     
     return NULL;
