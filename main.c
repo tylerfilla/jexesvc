@@ -233,7 +233,7 @@ char* recvline(SOCKET socket) {
         int result = recv(socket, buf, 1, 0);
         if (result > 0) {
             c = buf[0];
-            if (c != '\n' && c != EOF) {
+            if (c != '\r' && c != '\n' && c != EOF) {
                 line[i++] = c;
                 if (i == len) {
                     len += lenmax;
