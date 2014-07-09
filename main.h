@@ -5,12 +5,6 @@
 /* Type Definitions */
 
 typedef struct {
-    SOCKET socket;
-    struct sockaddr_in address;
-    int addressStructSize;
-} netnode_t;
-
-typedef struct {
     char* username;
     char* password;
 } login_t;
@@ -21,8 +15,6 @@ VOID  WINAPI serviceMain(DWORD, LPSTR*);
 VOID  WINAPI serviceCtrlHandler(DWORD);
 DWORD WINAPI serviceThread(LPVOID);
 void         serviceUpdateStatus();
-int          listenLoop();
-DWORD WINAPI clientHandlerThread(LPVOID);
-char*        handleClientCommand(char*);
+int          jexesvcMain();
 
 #endif // _MAIN_H_

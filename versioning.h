@@ -14,14 +14,14 @@
 	//Standard Version Type
 	static const long VERSION_MAJOR  = 0;
 	static const long VERSION_MINOR  = 0;
-	static const long VERSION_BUILD  = 170;
-	static const long VERSION_REVISION  = 948;
+	static const long VERSION_BUILD  = 175;
+	static const long VERSION_REVISION  = 979;
 	
 	//Miscellaneous Version Types
-	static const long VERSION_BUILDS_COUNT  = 288;
-	#define VERSION_RC_FILEVERSION 0,0,170,948
-	#define VERSION_RC_FILEVERSION_STRING "0, 0, 170, 948\0"
-	static const char VERSION_FULLVERSION_STRING [] = "0.0.170.948";
+	static const long VERSION_BUILDS_COUNT  = 315;
+	#define VERSION_RC_FILEVERSION 0,0,175,979
+	#define VERSION_RC_FILEVERSION_STRING "0, 0, 175, 979\0"
+	static const char VERSION_FULLVERSION_STRING [] = "0.0.175.979";
 	
 	//These values are to keep track of your versioning state, don't modify them.
 	static const long VERSION_BUILD_HISTORY  = 0;
