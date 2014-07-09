@@ -7,43 +7,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "main.h"
+#include "util.h"
 #include "versioning.h"
 
 #define SERVICE_NAME "JEXESVC"
 
-#define RUNTIME_CONTEXT_SERVICE 0
-#define RUNTIME_CONTEXT_CONSOLE 1
-
 #define SERVER_PORT 1337
 
-typedef struct {
-    SOCKET socket;
-    struct sockaddr_in address;
-    int addressStructSize;
-} netnode_t;
+SERVICE_STATUS        serviceStatus;
+SERVICE_STATUS_HANDLE serviceStatusHandle;
+HANDLE                serviceStopEventHandle;
 
-VOID  WINAPI ServiceMain(DWORD, LPSTR*);
-VOID  WINAPI ServiceCtrlHandler(DWORD);
-DWORD WINAPI ServiceThread(LPVOID);
-BOOL         updateStatus();
-int          listenLoop();
-DWORD WINAPI ClientHandlerThread(LPVOID);
-char*        recvline(SOCKET);
-char*        handleClientCommand(char*);
-
-SERVICE_STATUS        g_ServiceStatus;
-SERVICE_STATUS_HANDLE g_StatusHandle;
-HANDLE                g_ServiceStopEvent;
-
-int runtimeContext;
+int debugMode;
+login_t processLogin;
 
 int main(int argc, char** argv) {
-    runtimeContext = RUNTIME_CONTEXT_SERVICE;
-    
-    SERVICE_TABLE_ENTRY ServiceTableEntry[] = {
+    SERVICE_TABLE_ENTRY serviceTableEntry[] = {
         {
             (char*)                   SERVICE_NAME,
-            (LPSERVICE_MAIN_FUNCTION) ServiceMain,
+            (LPSERVICE_MAIN_FUNCTION) serviceMain,
         },
         {
             NULL,
@@ -51,10 +34,10 @@ int main(int argc, char** argv) {
         },
     };
     
-    if (!StartServiceCtrlDispatcher(ServiceTableEntry)) {
+    if (!StartServiceCtrlDispatcher(serviceTableEntry)) {
         int error = GetLastError();
         if (error == ERROR_FAILED_SERVICE_CONTROLLER_CONNECT) {
-            runtimeContext = RUNTIME_CONTEXT_CONSOLE;
+            debugMode = 1;
             return listenLoop();
         } else {
             return error;
@@ -64,79 +47,73 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-VOID WINAPI ServiceMain(DWORD argc, LPSTR* argv) {
-    g_StatusHandle = RegisterServiceCtrlHandler(SERVICE_NAME, ServiceCtrlHandler);
-    if (!g_StatusHandle) {
+/* Service Functions */
+
+VOID WINAPI serviceMain(DWORD argc, LPSTR* argv) {
+    serviceStatusHandle = RegisterServiceCtrlHandler(SERVICE_NAME, serviceCtrlHandler);
+    if (!serviceStatusHandle) {
         return;
     }
     
-    ZeroMemory(&g_ServiceStatus, sizeof(g_ServiceStatus));
-    g_ServiceStatus.dwCheckPoint = 0;
-    g_ServiceStatus.dwControlsAccepted = 0;
-    g_ServiceStatus.dwCurrentState = SERVICE_START_PENDING;
-    g_ServiceStatus.dwServiceSpecificExitCode = 0;
-    g_ServiceStatus.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
-    g_ServiceStatus.dwWin32ExitCode = 0;
-    updateStatus();
+    ZeroMemory(&serviceStatus, sizeof(serviceStatus));
+    serviceStatus.dwCurrentState = SERVICE_START_PENDING;
+    serviceStatus.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
+    serviceUpdateStatus();
     
-    g_ServiceStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!g_ServiceStopEvent) {
-        g_ServiceStatus.dwCheckPoint = 1;
-        g_ServiceStatus.dwCurrentState = SERVICE_STOPPED;
-        g_ServiceStatus.dwWin32ExitCode = GetLastError();
-        updateStatus();
+    serviceStopEventHandle = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (!serviceStopEventHandle) {
+        serviceStatus.dwCheckPoint = 1;
+        serviceStatus.dwCurrentState = SERVICE_STOPPED;
+        serviceStatus.dwWin32ExitCode = GetLastError();
+        serviceUpdateStatus();
         
         return;
     }
     
-    g_ServiceStatus.dwControlsAccepted = SERVICE_ACCEPT_STOP;
-    g_ServiceStatus.dwCurrentState = SERVICE_RUNNING;
-    updateStatus();
+    serviceStatus.dwControlsAccepted = SERVICE_ACCEPT_STOP;
+    serviceStatus.dwCurrentState = SERVICE_RUNNING;
+    serviceUpdateStatus();
     
-    WaitForSingleObject(CreateThread(NULL, 0, ServiceThread, NULL, 0, NULL), INFINITE);
+    WaitForSingleObject(CreateThread(NULL, 0, serviceThread, NULL, 0, NULL), INFINITE);
     
-    CloseHandle(g_ServiceStopEvent);
+    CloseHandle(serviceStopEventHandle);
     
-    g_ServiceStatus.dwCheckPoint = 3;
-    g_ServiceStatus.dwControlsAccepted = 0;
-    g_ServiceStatus.dwCurrentState = SERVICE_STOPPED;
-    updateStatus();
+    serviceStatus.dwCheckPoint = 3;
+    serviceStatus.dwControlsAccepted = 0;
+    serviceStatus.dwCurrentState = SERVICE_STOPPED;
+    serviceUpdateStatus();
 }
 
-VOID WINAPI ServiceCtrlHandler(DWORD ctrlCode) {
-    switch (ctrlCode) {
-    case SERVICE_CONTROL_STOP:
-        if (g_ServiceStatus.dwCurrentState != SERVICE_RUNNING) {
-            break;
+VOID WINAPI serviceCtrlHandler(DWORD control) {
+    if (control == SERVICE_CONTROL_STOP) {
+        if (serviceStatus.dwCurrentState != SERVICE_RUNNING) {
+            return;
         }
         
-        g_ServiceStatus.dwCheckPoint = 4;
-        g_ServiceStatus.dwControlsAccepted = 0;
-        g_ServiceStatus.dwCurrentState = SERVICE_STOP_PENDING;
-        g_ServiceStatus.dwWin32ExitCode = 0;
-        updateStatus();
+        serviceStatus.dwCheckPoint = 4;
+        serviceStatus.dwControlsAccepted = 0;
+        serviceStatus.dwCurrentState = SERVICE_STOP_PENDING;
+        serviceStatus.dwWin32ExitCode = 0;
+        serviceUpdateStatus();
         
-        SetEvent(g_ServiceStopEvent);
-        
-        break;
+        SetEvent(serviceStopEventHandle);
     }
 }
 
-DWORD WINAPI ServiceThread(LPVOID lpParam) {
+DWORD WINAPI serviceThread(LPVOID lpParam) {
     return listenLoop();
 }
 
-BOOL updateStatus() {
-    if (!SetServiceStatus(g_StatusHandle, &g_ServiceStatus)) {
+void serviceUpdateStatus() {
+    if (!SetServiceStatus(serviceStatusHandle, &serviceStatus)) {
         OutputDebugString("Unable to update service status");
-        return FALSE;
     }
-    
-    return TRUE;
 }
 
+/* JEXESVC Functions */
+
 int listenLoop() {
-    if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
+    if (debugMode) {
         printf("JEXESVC %s (%d) \n\n", VERSION_FULLVERSION_STRING, (int) VERSION_BUILDS_COUNT);
         printf("This service is running as a normal console application.\n");
         printf("Use this mode only for debugging purposes.\n\n");
@@ -147,31 +124,28 @@ int listenLoop() {
     WSADATA wsaData;
     
     netnode_t server;
-    netnode_t client;
-    
     server.addressStructSize = sizeof(struct sockaddr_in);
-    client.addressStructSize = sizeof(struct sockaddr_in);
     
     server.address.sin_addr.s_addr = INADDR_ANY;
     server.address.sin_family = AF_INET;
     server.address.sin_port = htons(SERVER_PORT);
     
     if (WSAStartup(MAKEWORD(2, 2), &wsaData)) {
-        if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
+        if (debugMode) {
             printf("WSAStartup failed (Error %d)\n", WSAGetLastError());
         }
         return 1;
     }
     
     if ((server.socket = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
-        if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
+        if (debugMode) {
             printf("Unable to create server socket (Error %d)\n", WSAGetLastError());
             ready = 0;
         }
     }
     
     if (bind(server.socket, (struct sockaddr*) &server.address, server.addressStructSize) == SOCKET_ERROR) {
-        if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
+        if (debugMode) {
             printf("Unable to bind server socket (Error %d)\n", WSAGetLastError());
             ready = 0;
         }
@@ -180,16 +154,20 @@ int listenLoop() {
     if (ready) {
         listen(server.socket, 3);
         
-        if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
+        if (debugMode) {
             printf("Listening on port %d...\n\n", SERVER_PORT);
         }
         
-        while (WaitForSingleObject(g_ServiceStopEvent, 0) != WAIT_OBJECT_0) {
+        while (WaitForSingleObject(serviceStopEventHandle, 0) != WAIT_OBJECT_0) {
+            netnode_t client;
+            
+            client.addressStructSize = sizeof(struct sockaddr_in);
             client.socket = accept(server.socket, (struct sockaddr*) &client.address, &client.addressStructSize);
+            
             if (client.socket != INVALID_SOCKET) {
-                CreateThread(NULL, 0, ClientHandlerThread, &client, 0, NULL);
+                CreateThread(NULL, 0, clientHandlerThread, &client, 0, NULL);
             } else {
-                if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
+                if (debugMode) {
                     printf("Client socket is invalid\n");
                 }
             }
@@ -202,10 +180,10 @@ int listenLoop() {
     return 0;
 }
 
-DWORD WINAPI ClientHandlerThread(LPVOID lpParam) {
+DWORD WINAPI clientHandlerThread(LPVOID lpParam) {
     netnode_t* client = (netnode_t*) lpParam;
     
-    if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
+    if (debugMode) {
         printf("New connection from %s:%d\n\n", inet_ntoa(client->address.sin_addr), client->address.sin_port);
     }
     
@@ -224,47 +202,13 @@ DWORD WINAPI ClientHandlerThread(LPVOID lpParam) {
         free(line);
     }
     
-    if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
+    if (debugMode) {
         printf("Disconnected from %s:%d\n\n", inet_ntoa(client->address.sin_addr), client->address.sin_port);
     }
     
     closesocket(client->socket);
     
     return 0;
-}
-
-char* recvline(SOCKET socket) {
-    size_t lenmax = 64;
-    size_t len = lenmax;
-    
-    char* line = calloc(len, sizeof(char));
-    
-    char c = 0;
-    int i = 0;
-    while (1) {
-        char buf[1];
-        int result = recv(socket, buf, 1, 0);
-        if (result > 0) {
-            c = buf[0];
-            if (c != '\n' && c != EOF) {
-                line[i++] = c;
-                if (i == len) {
-                    len += lenmax;
-                    line = realloc(line, len);
-                    
-                    for (int j = i; j < len; j++) {
-                        line[j] = 0;
-                    }
-                }
-            } else {
-                break;
-            }
-        } else if (result == 0) {
-            return NULL;
-        }
-    }
-    
-    return line;
 }
 
 char* handleClientCommand(char* command) {
@@ -316,16 +260,28 @@ char* handleClientCommand(char* command) {
         }
     }
     
-    if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
-        printf("Client issued command: %s\n", command);
-        printf("Command name: %s\n", name);
+    if (debugMode) {
+        printf("Client issued command: \"%s\"\n", command);
+        printf("Command name: \"%s\"\n", name);
         printf("Number of arguments: %d\n", numArgs);
         
         for (int i = 0; i < numArgs; i++) {
-            printf("Argument #%d: %s\n", i, args[i]);
+            printf("Argument #%d: \"%s\"\n", i, args[i]);
         }
         
         printf("\n");
+    }
+    
+    if (!strcmp(name, "exec")) {
+    } else if (!strcmp(name, "kill")) {
+    } else if (!strcmp(name, "query")) {
+    } else if (!strcmp(name, "login")) {
+        processLogin.username = args[0];
+        processLogin.password = args[1];
+        
+        if (debugMode) {
+            printf("Will start process with user \"%s\" and password \"%s\"\n\n", processLogin.username, processLogin.password);
+        }
     }
     
     return NULL;
