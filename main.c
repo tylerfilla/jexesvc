@@ -21,6 +21,8 @@ VOID  WINAPI ServiceCtrlHandler(DWORD);
 DWORD WINAPI ServiceThread(LPVOID);
 BOOL         updateStatus();
 int          listenLoop();
+void         handleClient();
+char* recvline(SOCKET socket);
 
 SERVICE_STATUS        g_ServiceStatus;
 SERVICE_STATUS_HANDLE g_StatusHandle;
@@ -140,12 +142,15 @@ int listenLoop() {
     SOCKET socketServer;
     SOCKET socketClient;
     
-    struct sockaddr_in server;
-    struct sockaddr_in client;
+    struct sockaddr_in addrServer;
+    struct sockaddr_in addrClient;
     
-    server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_family = AF_INET;
-    server.sin_port = htons(SERVER_PORT);
+    int addrServerSize = sizeof(addrClient);
+    int addrClientSize = sizeof(addrClient);
+    
+    addrServer.sin_addr.s_addr = INADDR_ANY;
+    addrServer.sin_family = AF_INET;
+    addrServer.sin_port = htons(SERVER_PORT);
     
     if (WSAStartup(MAKEWORD(2, 2), &wsaData)) {
         if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
@@ -161,7 +166,7 @@ int listenLoop() {
         }
     }
     
-    if (bind(socketServer, (struct sockaddr*) &server, sizeof(server)) == SOCKET_ERROR) {
+    if (bind(socketServer, (struct sockaddr*) &addrServer, addrServerSize) == SOCKET_ERROR) {
         if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
             printf("Unable to bind server socket (Error %d)\n", WSAGetLastError());
             ready = 0;
@@ -170,16 +175,16 @@ int listenLoop() {
     
     listen(socketServer, 3);
     
-    if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
-        printf("Listening on port %d...\n", SERVER_PORT);
-    }
-    
     if (ready) {
+        if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
+            printf("Listening on port %d...\n\n", SERVER_PORT);
+        }
+        
         while (WaitForSingleObject(g_ServiceStopEvent, 0) != WAIT_OBJECT_0) {
-            int clientSize = sizeof(client);
-            socketClient = accept(socketServer, (struct sockaddr*) &client, &clientSize);
+            socketClient = accept(socketServer, (struct sockaddr*) &addrClient, &addrClientSize);
             if (socketClient != INVALID_SOCKET) {
-                // TODO: Branch to another thread to handle the socket
+                handleClient(socketClient, &addrClient, &addrClientSize);
+                closesocket(socketClient);
             } else {
                 if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
                     printf("Client socket is invalid\n");
@@ -192,4 +197,59 @@ int listenLoop() {
     WSACleanup();
     
     return 0;
+}
+
+void handleClient(SOCKET socket, struct sockaddr_in* addr, int addrSizePtr) {
+    if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
+        printf("New connection from %s:%d\n", inet_ntoa(addr->sin_addr), addr->sin_port);
+    }
+    
+    while (1) {
+        char* line = recvline(socket);
+        
+        if (line == NULL) {
+            if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
+                printf("Lost connection to %s:%d\n", inet_ntoa(addr->sin_addr), addr->sin_port);
+            }
+            break;
+        }
+        
+        send(socket, line, strlen(line), 0);
+        
+        free(line);
+    }
+}
+
+char* recvline(SOCKET socket) {
+    size_t lenmax = 64;
+    size_t len = lenmax;
+    
+    char* line = calloc(len, sizeof(char));
+    
+    char c = 0;
+    int i = 0;
+    while (1) {
+        char buf[1];
+        int result = recv(socket, buf, 1, 0);
+        if (result > 0) {
+            c = buf[0];
+            if (c != '\n' && c != EOF) {
+                line[i++] = c;
+                if (i == len) {
+                    len += lenmax;
+                    line = realloc(line, len);
+                    
+                    for (int j = i; j < len; j++) {
+                        line[j] = 0;
+                    }
+                }
+            } else {
+                break;
+            }
+        } else if (result == 0) {
+            return NULL;
+        }
+    }
+    
+    return line;
 }
