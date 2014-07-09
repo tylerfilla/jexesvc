@@ -20,7 +20,7 @@ VOID  WINAPI ServiceMain(DWORD, LPSTR*);
 VOID  WINAPI ServiceCtrlHandler(DWORD);
 DWORD WINAPI ServiceThread(LPVOID);
 BOOL         updateStatus();
-int          action();
+int          listenLoop();
 
 SERVICE_STATUS        g_ServiceStatus;
 SERVICE_STATUS_HANDLE g_StatusHandle;
@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
         int error = GetLastError();
         if (error == ERROR_FAILED_SERVICE_CONTROLLER_CONNECT) {
             runtimeContext = RUNTIME_CONTEXT_CONSOLE;
-            return action();
+            return listenLoop();
         } else {
             return error;
         }
@@ -114,7 +114,7 @@ VOID WINAPI ServiceCtrlHandler(DWORD ctrlCode) {
 }
 
 DWORD WINAPI ServiceThread(LPVOID lpParam) {
-    return action();
+    return listenLoop();
 }
 
 BOOL updateStatus() {
@@ -126,7 +126,7 @@ BOOL updateStatus() {
     return TRUE;
 }
 
-int action() {
+int listenLoop() {
     if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
         printf("JEXESVC %s (%d) \n\n", VERSION_FULLVERSION_STRING, (int) VERSION_BUILDS_COUNT);
         printf("This service is running as a normal console application.\n");
@@ -182,14 +182,13 @@ int action() {
                 // TODO: Branch to another thread to handle the socket
             } else {
                 if (runtimeContext == RUNTIME_CONTEXT_CONSOLE) {
-                    printf("Client socket invalid\n");
+                    printf("Client socket is invalid\n");
                 }
             }
         }
     }
     
     closesocket(socketServer);
-    
     WSACleanup();
     
     return 0;
