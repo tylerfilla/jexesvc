@@ -6,6 +6,9 @@
 
 #define SERVER_PORT 1337
 
+#define BUFFER_SIZE_PIPE 512
+#define BUFFER_SIZE_COMMAND 256
+
 /* Function Prototypes */
 
 VOID  WINAPI serviceMain(DWORD, LPSTR*);

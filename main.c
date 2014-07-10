@@ -8,6 +8,7 @@
 #include <signal.h>
 
 #include "main.h"
+#include "util.h"
 #include "versioning.h"
 
 SERVICE_STATUS        serviceStatus;
@@ -119,7 +120,7 @@ int jexesvcMain() {
     HANDLE cmdPipe;
     
     while (shouldContinue()) {
-        cmdPipe = CreateNamedPipe("\\\\.\\pipe\\jexesvc\\cmd", PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_NOWAIT, PIPE_UNLIMITED_INSTANCES, 512, 512, 0, NULL);
+        cmdPipe = CreateNamedPipe("\\\\.\\pipe\\jexesvc\\cmd", PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, PIPE_UNLIMITED_INSTANCES, BUFFER_SIZE_PIPE, BUFFER_SIZE_PIPE, 0, NULL);
         
         if (cmdPipe == INVALID_HANDLE_VALUE) {
             if (debugMode) {
@@ -130,7 +131,7 @@ int jexesvcMain() {
         
         if (ConnectNamedPipe(cmdPipe, NULL)) {
             if (debugMode) {
-                printf("Accepted connection to command pipe\n");
+                printf("%d: Accepted connection to command pipe\n", cmdPipe);
             }
             CreateThread(NULL, 0, clientThread, cmdPipe, 0, NULL);
         } else {
@@ -150,11 +151,40 @@ int jexesvcMain() {
 DWORD WINAPI clientThread(LPVOID lpvParam) {
     HANDLE cmdPipe = (HANDLE) lpvParam;
     
-    // TODO: Handle client
+    while (shouldContinue()) {
+        char* request = readLine(cmdPipe);
+        
+        if (request == NULL) {
+            break;
+        } else {
+            if (debugMode) {
+                printf("%d: Received request from client: \"%s\"\n", cmdPipe, request);
+            }
+            
+            char* response = handleRequest(request);
+            if (response != NULL) {
+                writeLine(handle, response);
+            }
+            
+            free(request);
+        }
+    }
     
+    if (debugMode) {
+        printf("%d: Client disconnected from command pipe\n", cmdPipe);
+    }
+    
+    FlushFileBuffers(cmdPipe);
+    DisconnectNamedPipe(cmdPipe);
     CloseHandle(cmdPipe);
     
     return 0;
+}
+
+char* handleRequest(char* request) {
+    // TODO: Handle request
+    
+    return NULL;
 }
 
 BOOL WINAPI consoleCtrlHandler(DWORD event) {
