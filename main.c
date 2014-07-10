@@ -5,20 +5,17 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 
 #include "main.h"
 #include "versioning.h"
-
-#define SERVICE_NAME "JEXESVC"
-
-#define SERVER_PORT 1337
 
 SERVICE_STATUS        serviceStatus;
 SERVICE_STATUS_HANDLE serviceStatusHandle;
 HANDLE                serviceStopEventHandle;
 
 int debugMode;
-login_t processLogin;
+int debugModeStop;
 
 int main(int argc, char** argv) {
     SERVICE_TABLE_ENTRY serviceTableEntry[] = {
@@ -112,10 +109,67 @@ void serviceUpdateStatus() {
 
 int jexesvcMain() {
     if (debugMode) {
+        SetConsoleCtrlHandler(consoleCtrlHandler, TRUE);
+        
         printf("JEXESVC %s (%d) \n\n", VERSION_FULLVERSION_STRING, (int) VERSION_BUILDS_COUNT);
         printf("This service is running as a normal console application.\n");
         printf("Use this mode only for debugging purposes.\n\n");
     }
     
+    HANDLE cmdPipe;
+    
+    while (shouldContinue()) {
+        cmdPipe = CreateNamedPipe("\\\\.\\pipe\\jexesvc\\cmd", PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_NOWAIT, PIPE_UNLIMITED_INSTANCES, 512, 512, 0, NULL);
+        
+        if (cmdPipe == INVALID_HANDLE_VALUE) {
+            if (debugMode) {
+                printf("Unable to create command pipe instance (Error %d)\n", GetLastError());
+            }
+            break;
+        }
+        
+        if (ConnectNamedPipe(cmdPipe, NULL)) {
+            if (debugMode) {
+                printf("Accepted connection to command pipe\n");
+            }
+            CreateThread(NULL, 0, clientThread, cmdPipe, 0, NULL);
+        } else {
+            CloseHandle(cmdPipe);
+        }
+    }
+    
+    if (debugMode) {
+        printf("JEXESVC is exiting...\n");
+    }
+    
+    CloseHandle(cmdPipe);
+    
+    return 0;
+}
+
+DWORD WINAPI clientThread(LPVOID lpvParam) {
+    HANDLE cmdPipe = (HANDLE) lpvParam;
+    
+    // TODO: Handle client
+    
+    CloseHandle(cmdPipe);
+    
+    return 0;
+}
+
+BOOL WINAPI consoleCtrlHandler(DWORD event) {
+    if (event == CTRL_C_EVENT || event == CTRL_CLOSE_EVENT) {
+        debugModeStop = 1;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+int shouldContinue() {
+    if (debugMode) {
+        return !debugModeStop;
+    } else {
+        return WaitForSingleObject(serviceStopEventHandle, 0);
+    }
     return 0;
 }

@@ -2,12 +2,9 @@
 #ifndef _MAIN_H_
 #define _MAIN_H_
 
-/* Type Definitions */
+#define SERVICE_NAME "JEXESVC"
 
-typedef struct {
-    char* username;
-    char* password;
-} login_t;
+#define SERVER_PORT 1337
 
 /* Function Prototypes */
 
@@ -16,5 +13,8 @@ VOID  WINAPI serviceCtrlHandler(DWORD);
 DWORD WINAPI serviceThread(LPVOID);
 void         serviceUpdateStatus();
 int          jexesvcMain();
+DWORD WINAPI clientThread(LPVOID);
+BOOL  WINAPI consoleCtrlHandler(DWORD);
+int          shouldContinue();
 
 #endif // _MAIN_H_
