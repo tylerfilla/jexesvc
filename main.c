@@ -5,7 +5,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <signal.h>
+#include <string.h>
 
 #include "main.h"
 #include "util.h"
@@ -120,7 +120,7 @@ int jexesvcMain() {
     HANDLE cmdPipe;
     
     while (shouldContinue()) {
-        cmdPipe = CreateNamedPipe("\\\\.\\pipe\\jexesvc\\cmd", PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, PIPE_UNLIMITED_INSTANCES, BUFFER_SIZE_PIPE, BUFFER_SIZE_PIPE, 0, NULL);
+        cmdPipe = CreateNamedPipe(PIPE_URL_COMMAND, PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, PIPE_UNLIMITED_INSTANCES, BUFFER_SIZE_PIPE, BUFFER_SIZE_PIPE, 0, NULL);
         
         if (cmdPipe == INVALID_HANDLE_VALUE) {
             if (debugMode) {
@@ -161,9 +161,11 @@ DWORD WINAPI clientThread(LPVOID lpvParam) {
                 printf("%d: Received request from client: \"%s\"\n", cmdPipe, request);
             }
             
-            char* response = handleRequest(request);
-            if (response != NULL) {
-                writeLine(handle, response);
+            char* response = handleRequest(cmdPipe, request);
+            if (response == NULL) {
+                writeLine(cmdPipe, "NULL");
+            } else {
+                writeLine(cmdPipe, response);
             }
             
             free(request);
@@ -181,10 +183,94 @@ DWORD WINAPI clientThread(LPVOID lpvParam) {
     return 0;
 }
 
-char* handleRequest(char* request) {
-    // TODO: Handle request
+char* handleRequest(HANDLE cmdPipe, char* request) {
+    if (strstr(request, "COMMAND ") == request) {
+        char command[strlen(request) - strlen("COMMAND ") + 1];
+        strncpy(command, request + 8, strlen(request) - 8);
+        return handleRequestCommand(cmdPipe, command);
+    } else if (strstr(request, "DATAREQ ") == request) {
+        char dataRequest[strlen(request) - strlen("DATAREQ ") + 1];
+        strncpy(dataRequest, request + 8, strlen(request) - 8);
+        return handleRequestData(cmdPipe, dataRequest);
+    }
     
-    return NULL;
+    return "ERROR UNKNOWN";
+}
+
+char* handleRequestCommand(HANDLE cmdPipe, char* command) {
+    if (debugMode) {
+        printf("%d: Request is a command: \"%s\"\n", cmdPipe, command);
+    }
+    
+    if (strstr(command, "exec ") == command && strlen(command) > 5) {
+        char execArgs[strlen(command) - strlen("exec ") + 1];
+        strncpy(execArgs, command + 5, strlen(command) - 5);
+        return executeExec(cmdPipe, execArgs);
+    } else if (strstr(command, "kill ") == command && strlen(command) > 5) {
+        char killArgs[strlen(command) - strlen("kill ") + 1];
+        strncpy(killArgs, command + 5, strlen(command) - 5);
+        return executeKill(cmdPipe, killArgs);
+    } else if (strstr(command, "query ") == command && strlen(command) > 6) {
+        char queryArgs[strlen(command) - strlen("query ") + 1];
+        strncpy(queryArgs, command + 6, strlen(command) - 6);
+        return commandQuery(cmdPipe, queryArgs);
+    } else if (strstr(command, "login ") == command && strlen(command) > 6) {
+        char loginArgs[strlen(command) - strlen("login ") + 1];
+        strncpy(loginArgs, command + 6, strlen(command) - 6);
+        return commandLogin(cmdPipe, loginArgs);
+    }
+    
+    return "ERROR UNKNOWN";
+}
+
+char* handleRequestData(HANDLE cmdPipe, char* datareq) {
+    if (debugMode) {
+        printf("%d: Request is a data request: \"%s\"\n", cmdPipe, datareq);
+    }
+    
+    // TODO: Handle data request
+    
+    return "ERROR UNKNOWN";
+}
+
+char* commandExec(HANDLE cmdPipe, char* execArgs) {
+    if (debugMode) {
+        printf("%d: Execute: \"%s\"\n", cmdPipe, execArgs);
+    }
+    
+    // TODO: Execute process
+    
+    return "ERROR UNKNOWN";
+}
+
+char* commandKill(HANDLE cmdPipe, char* killArgs) {
+    if (debugMode) {
+        printf("%d: Kill: \"%s\"\n", cmdPipe, killArgs);
+    }
+    
+    // TODO: Kill process
+    
+    return "ERROR UNKNOWN";
+}
+
+char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
+    if (debugMode) {
+        printf("%d: Query: \"%s\"\n", cmdPipe, queryArgs);
+    }
+    
+    // TODO: Query process
+    
+    return "ERROR UNKNOWN";
+}
+
+char* commandLogin(HANDLE cmdPipe, char* loginArgs) {
+    if (debugMode) {
+        printf("%d: Login: \"%s\"\n", cmdPipe, loginArgs);
+    }
+    
+    // TODO: Extract and store credentials
+    
+    return "ERROR UNKNOWN";
 }
 
 BOOL WINAPI consoleCtrlHandler(DWORD event) {
