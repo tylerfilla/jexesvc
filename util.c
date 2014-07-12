@@ -48,3 +48,22 @@ void writeLine(HANDLE handle, char* line) {
     WriteFile(handle, "\n", 1, &numBytesWritten, NULL);
     FlushFileBuffers(handle);
 }
+
+int strstart(char* str, char* prefix) {
+    return strstr(str, prefix) == str;
+}
+
+int strend(char* str, char* suffix) {
+    return strstr(str, suffix) == str + strlen(str) - strlen(suffix);
+}
+
+void strsub(char* str, char* sub, int begin, int end) {
+    if (begin >= end || end - begin < 0 || end - begin > strlen(str)) {
+        return;
+    }
+    
+    int i = 0;
+    for (int j = begin; j < end + 1; j++) {
+        sub[i++] = str[j];
+    }
+}

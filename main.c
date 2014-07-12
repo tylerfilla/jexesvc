@@ -148,6 +148,25 @@ int jexesvcMain() {
     return 0;
 }
 
+BOOL WINAPI consoleCtrlHandler(DWORD event) {
+    if (event == CTRL_C_EVENT || event == CTRL_CLOSE_EVENT) {
+        debugModeStop = 1;
+        return TRUE;
+    }
+    
+    return FALSE;
+}
+
+int shouldContinue() {
+    if (debugMode) {
+        return !debugModeStop;
+    } else {
+        return WaitForSingleObject(serviceStopEventHandle, 0);
+    }
+    
+    return 0;
+}
+
 DWORD WINAPI clientThread(LPVOID lpvParam) {
     HANDLE cmdPipe = (HANDLE) lpvParam;
     
@@ -163,8 +182,32 @@ DWORD WINAPI clientThread(LPVOID lpvParam) {
             
             char* response = handleRequest(cmdPipe, request);
             if (response == NULL) {
-                writeLine(cmdPipe, "NULL");
+                if (debugMode) {
+                    printf("%d: Sending null response\n", cmdPipe);
+                }
+                writeLine(cmdPipe, "ERROR NULL");
+            } else if (strstr(response, "ERROR ") == response) {
+                if (debugMode) {
+                    printf("%d: Sending error response: %s\n", cmdPipe, response);
+                }
+                writeLine(cmdPipe, response);
             } else {
+                if (debugMode) {
+                    printf("%d: Sending response: %s\n", cmdPipe, response);
+                }
+                
+                int numLines = 1;
+                
+                for (int i = 0; i < strlen(response); i++) {
+                    if (response[i] == '\n') {
+                        numLines++;
+                    }
+                }
+                
+                char responseHeader[12];
+                sprintf(responseHeader, "RESPONSE %d", numLines);
+                
+                writeLine(cmdPipe, responseHeader);
                 writeLine(cmdPipe, response);
             }
             
@@ -184,13 +227,13 @@ DWORD WINAPI clientThread(LPVOID lpvParam) {
 }
 
 char* handleRequest(HANDLE cmdPipe, char* request) {
-    if (strstr(request, "COMMAND ") == request) {
+    if (strstart(request, "COMMAND ")) {
         char command[strlen(request) - strlen("COMMAND ") + 1];
-        strncpy(command, request + 8, strlen(request) - 8);
+        strsub(request, command, 8, strlen(request));
         return handleRequestCommand(cmdPipe, command);
-    } else if (strstr(request, "DATAREQ ") == request) {
+    } else if (strstart(request, "DATAREQ ")) {
         char dataRequest[strlen(request) - strlen("DATAREQ ") + 1];
-        strncpy(dataRequest, request + 8, strlen(request) - 8);
+        strsub(request, dataRequest, 8, strlen(request));
         return handleRequestData(cmdPipe, dataRequest);
     }
     
@@ -202,22 +245,18 @@ char* handleRequestCommand(HANDLE cmdPipe, char* command) {
         printf("%d: Request is a command: \"%s\"\n", cmdPipe, command);
     }
     
-    if (strstr(command, "exec ") == command && strlen(command) > 5) {
+    if (strstart(command, "exec ") && strlen(command) > 5) {
         char execArgs[strlen(command) - strlen("exec ") + 1];
-        strncpy(execArgs, command + 5, strlen(command) - 5);
-        return executeExec(cmdPipe, execArgs);
-    } else if (strstr(command, "kill ") == command && strlen(command) > 5) {
+        strsub(command, execArgs, 5, strlen(command));
+        return commandExec(cmdPipe, execArgs);
+    } else if (strstart(command, "kill ") && strlen(command) > 5) {
         char killArgs[strlen(command) - strlen("kill ") + 1];
-        strncpy(killArgs, command + 5, strlen(command) - 5);
-        return executeKill(cmdPipe, killArgs);
-    } else if (strstr(command, "query ") == command && strlen(command) > 6) {
+        strsub(command, killArgs, 5, strlen(command));
+        return commandKill(cmdPipe, killArgs);
+    } else if (strstart(command, "query ") && strlen(command) > 6) {
         char queryArgs[strlen(command) - strlen("query ") + 1];
-        strncpy(queryArgs, command + 6, strlen(command) - 6);
+        strsub(command, queryArgs, 6, strlen(command));
         return commandQuery(cmdPipe, queryArgs);
-    } else if (strstr(command, "login ") == command && strlen(command) > 6) {
-        char loginArgs[strlen(command) - strlen("login ") + 1];
-        strncpy(loginArgs, command + 6, strlen(command) - 6);
-        return commandLogin(cmdPipe, loginArgs);
     }
     
     return "ERROR UNKNOWN";
@@ -261,31 +300,4 @@ char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
     // TODO: Query process
     
     return "ERROR UNKNOWN";
-}
-
-char* commandLogin(HANDLE cmdPipe, char* loginArgs) {
-    if (debugMode) {
-        printf("%d: Login: \"%s\"\n", cmdPipe, loginArgs);
-    }
-    
-    // TODO: Extract and store credentials
-    
-    return "ERROR UNKNOWN";
-}
-
-BOOL WINAPI consoleCtrlHandler(DWORD event) {
-    if (event == CTRL_C_EVENT || event == CTRL_CLOSE_EVENT) {
-        debugModeStop = 1;
-        return TRUE;
-    }
-    return FALSE;
-}
-
-int shouldContinue() {
-    if (debugMode) {
-        return !debugModeStop;
-    } else {
-        return WaitForSingleObject(serviceStopEventHandle, 0);
-    }
-    return 0;
 }
