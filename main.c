@@ -319,8 +319,8 @@ char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
             char processUserName[256];
             char processUserDomain[256];
             
-            int processUserNameSize = sizeof(processUserName);
-            int processUserDomainSize = sizeof(processUserDomain);
+            DWORD processUserNameSize = sizeof(processUserName);
+            DWORD processUserDomainSize = sizeof(processUserDomain);
             
             HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processEntry.th32ProcessID);
             
