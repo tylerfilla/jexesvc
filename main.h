@@ -15,20 +15,20 @@
 
 /* Function Prototypes */
 
-VOID  WINAPI serviceMain(DWORD, LPSTR*);
-VOID  WINAPI serviceCtrlHandler(DWORD);
-DWORD WINAPI serviceThread(LPVOID);
-void         serviceUpdateStatus();
-int          jexesvcMain();
-BOOL  WINAPI consoleCtrlHandler(DWORD);
-int          shouldContinue();
-DWORD WINAPI clientThread(LPVOID);
-char*        handleRequest(HANDLE, char*);
-char*        handleRequestCommand(HANDLE, char*);
-char*        handleRequestData(HANDLE, char*);
-char*        commandExec(HANDLE, char*);
-char*        commandKill(HANDLE, char*);
-char*        commandQuery(HANDLE, char*);
-char*        commandLogin(HANDLE, char*);
+VOID  WINAPI   serviceMain(DWORD, LPSTR*);
+VOID  WINAPI   serviceCtrlHandler(DWORD);
+DWORD WINAPI   serviceThread(LPVOID);
+void           serviceUpdateStatus();
+int            jexesvcMain();
+BOOL  WINAPI   consoleCtrlHandler(DWORD);
+int            shouldContinue();
+DWORD WINAPI   clientThread(LPVOID);
+char*          handleRequest(HANDLE, char*);
+char*          handleRequestCommand(HANDLE, char*);
+char*          handleRequestData(HANDLE, char*);
+char*          commandExec(HANDLE, char*);
+char*          commandKill(HANDLE, char*);
+char*          commandQuery(HANDLE, char*);
+BOOL  CALLBACK commandQueryEnumWindowsProc(HWND, LPARAM);
 
 #endif // _MAIN_H_

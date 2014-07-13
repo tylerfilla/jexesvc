@@ -338,13 +338,12 @@ char* commandKill(HANDLE cmdPipe, char* killArgs) {
 }
 
 char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
-    if (strcmp(queryArgs, "process") == 0) {
+    if (strcmp(queryArgs, "processes") == 0) {
         if (debugMode) {
             printf("%d: Querying processes\n", cmdPipe);
         }
         
         char* response = NULL;
-        char responseEntryFormat[] = "[pid=%d,name=\"%s\",path=\"%s\",domain=\"%s\",user=\"%s\"]\n";
         
         HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         
@@ -396,6 +395,7 @@ char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
             CloseHandle(process);
             
             char responseEntry[512];
+            char responseEntryFormat[] = "[pid=%d,name=\"%s\",path=\"%s\",domain=\"%s\",user=\"%s\"]\n";
             sprintf(responseEntry, responseEntryFormat, processId, processExecutableName, processFilePath, processUserDomain, processUserName);
             strcatd(&response, responseEntry);
             
@@ -410,8 +410,51 @@ char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
             printf("%d: Querying windows\n", cmdPipe);
         }
         
-        
+        char* response = NULL;
+        EnumWindows(commandQueryEnumWindowsProc, (LPARAM) &response);
+        return response;
     }
     
     return "ERROR UNKNOWN";
+}
+
+BOOL CALLBACK commandQueryEnumWindowsProc(HWND hwnd, LPARAM lParam) {
+    /* Filter Windows */
+    
+    HWND test, above;
+    
+    if (!IsWindowVisible(hwnd)) {
+        return TRUE;
+    }
+    
+    above = GetAncestor(hwnd, GA_ROOTOWNER);
+    while (test != above) {
+        above = test;
+        test = GetLastActivePopup(above);
+        if (IsWindowVisible(test)) {
+            break;
+        }
+    }
+    if (test != above) {
+        return TRUE;
+    }
+    
+    if (GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) {
+        return TRUE;
+    }
+    
+    /* Handle Windows */
+    
+    char windowTitle[128];
+    DWORD windowProcessId;
+    
+    GetWindowText(hwnd, windowTitle, sizeof(windowTitle));
+    GetWindowThreadProcessId(hwnd, &windowProcessId);
+    
+    char responseEntry[512];
+    char responseEntryFormat[] = "[title=\"%s\",pid=%d]\n";
+    sprintf(responseEntry, responseEntryFormat, windowTitle, windowProcessId);
+    strcatd((char**) lParam, responseEntry);
+    
+    return TRUE;
 }
