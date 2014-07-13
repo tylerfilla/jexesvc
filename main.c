@@ -344,7 +344,7 @@ char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
         }
         
         char* response = NULL;
-        char responseEntryFormat[] = "[pid=%d,name=\"%s\",path=\"%s\",user=\"%s\\%s\"]\n";
+        char responseEntryFormat[] = "[pid=%d,name=\"%s\",path=\"%s\",domain=\"%s\",user=\"%s\"]\n";
         
         HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         
