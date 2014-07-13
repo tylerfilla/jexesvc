@@ -120,6 +120,46 @@ int jexesvcMain() {
         printf("Use this mode only for debugging purposes.\n\n");
     }
     
+    /* Acquire SeDebugPrivilege */
+    
+    HANDLE processToken;
+    TOKEN_PRIVILEGES privileges;
+    TOKEN_PRIVILEGES privilegesPrevious;
+    DWORD privilegesPreviousSize;
+    LUID luid;
+    
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &processToken)) {
+        if (GetLastError() == ERROR_NO_TOKEN) {
+            if (ImpersonateSelf(SecurityImpersonation)) {
+                OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &processToken);
+            }
+        }
+    }
+    
+    if (LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &luid)) {
+        privileges.PrivilegeCount = 1;
+        privileges.Privileges[0].Luid = luid;
+        privileges.Privileges[0].Attributes = 0;
+        
+        AdjustTokenPrivileges(processToken, FALSE, &privileges, sizeof(TOKEN_PRIVILEGES), &privilegesPrevious, &privilegesPreviousSize);
+        
+        if (GetLastError() == ERROR_SUCCESS) {
+            privilegesPrevious.PrivilegeCount = 1;
+            privilegesPrevious.Privileges[0].Luid = luid;
+            privilegesPrevious.Privileges[0].Attributes |= SE_PRIVILEGE_ENABLED;
+            
+            AdjustTokenPrivileges(processToken, FALSE, &privilegesPrevious, privilegesPreviousSize, NULL, NULL);
+            
+            if (GetLastError() != ERROR_SUCCESS && debugMode) {
+                printf("Could not enable SeDebugPrivilege");
+            }
+        }
+    }
+    
+    CloseHandle(processToken);
+    
+    /* Communication */
+    
     HANDLE cmdPipe;
     
     while (shouldContinue()) {
@@ -142,11 +182,11 @@ int jexesvcMain() {
         }
     }
     
+    CloseHandle(cmdPipe);
+    
     if (debugMode) {
         printf("JEXESVC is exiting...\n");
     }
-    
-    CloseHandle(cmdPipe);
     
     return 0;
 }
@@ -304,6 +344,7 @@ char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
         }
         
         char* response = NULL;
+        char responseEntryFormat[] = "[pid=%d,name=\"%s\",path=\"%s\",user=\"%s\\%s\"]\n";
         
         HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         
@@ -354,7 +395,6 @@ char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
             
             CloseHandle(process);
             
-            char responseEntryFormat[] = "[pid=%d,name=\"%s\",path=\"%s\",user=\"%s\\%s\"]\n";
             char responseEntry[512];
             sprintf(responseEntry, responseEntryFormat, processId, processExecutableName, processFilePath, processUserDomain, processUserName);
             strcatd(&response, responseEntry);
@@ -365,14 +405,12 @@ char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
         CloseHandle(snapshot);
         
         return response;
-    } else if (strcmp(queryArgs, "threads") == 0) {
-        if (debugMode) {
-            printf("%d: Querying threads\n", cmdPipe);
-        }
     } else if (strcmp(queryArgs, "windows") == 0) {
         if (debugMode) {
             printf("%d: Querying windows\n", cmdPipe);
         }
+        
+        
     }
     
     return "ERROR UNKNOWN";
