@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 char* readLine(HANDLE handle) {
     size_t lenmax = 64;
@@ -49,6 +50,26 @@ void writeLine(HANDLE handle, char* line) {
     FlushFileBuffers(handle);
 }
 
+void strcatd(char** str, const char* append) {
+    if (*str != NULL && append == NULL) {
+        free(*str);
+        *str = NULL;
+        return;
+    }
+    
+    if (*str == NULL ) {
+        *str = calloc(strlen(append) + 1, sizeof(char));
+        memcpy(*str, append, strlen(append));
+    } else {
+        char* tmp = calloc(strlen(*str) + 1, sizeof(char));
+        memcpy(tmp, *str, strlen(*str));
+        *str = calloc(strlen(*str) + strlen(append) + 1, sizeof(char));
+        memcpy(*str, tmp, strlen(tmp));
+        memcpy(*str + strlen(*str), append, strlen(append));
+        free(tmp);
+    }
+}
+
 int strstart(char* str, char* prefix) {
     return strstr(str, prefix) == str;
 }
@@ -65,5 +86,22 @@ void strsub(char* str, char* sub, int begin, int end) {
     int i = 0;
     for (int j = begin; j < end + 1; j++) {
         sub[i++] = str[j];
+    }
+}
+
+void convertNTPathToWin32Path(char* pathNT, char* pathWin32) {
+    char dosTargetPath[64];
+    char dosDrive[] = " :";
+    for (char c = 'A'; c <= 'Z'; c++) {
+        dosDrive[0] = c;
+        QueryDosDevice(dosDrive, dosTargetPath, sizeof(dosTargetPath));
+        
+        if (strlen(dosTargetPath) > 0 && strstart(pathNT, dosTargetPath)) {
+            char pathTmp[strlen(pathNT) - strlen(dosTargetPath) + 1];
+            strsub(pathNT, pathTmp, strlen(dosTargetPath), strlen(pathNT));
+            sprintf(pathWin32, "%s%s", strupr(dosDrive), pathTmp);
+            
+            break;
+        }
     }
 }

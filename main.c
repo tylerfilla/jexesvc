@@ -2,6 +2,9 @@
 #define WIN32_LEAN_AND_MEAN
 
 #include <windows.h>
+#include <process.h>
+#include <tlhelp32.h>
+#include <psapi.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -181,6 +184,7 @@ DWORD WINAPI clientThread(LPVOID lpvParam) {
             }
             
             char* response = handleRequest(cmdPipe, request);
+            
             if (response == NULL) {
                 if (debugMode) {
                     printf("%d: Sending null response\n", cmdPipe);
@@ -212,6 +216,7 @@ DWORD WINAPI clientThread(LPVOID lpvParam) {
             }
             
             free(request);
+            free(response);
         }
     }
     
@@ -293,11 +298,82 @@ char* commandKill(HANDLE cmdPipe, char* killArgs) {
 }
 
 char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
-    if (debugMode) {
-        printf("%d: Query: \"%s\"\n", cmdPipe, queryArgs);
+    if (strcmp(queryArgs, "process") == 0) {
+        if (debugMode) {
+            printf("%d: Querying processes\n", cmdPipe);
+        }
+        
+        char* response = NULL;
+        
+        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        
+        PROCESSENTRY32 processEntry;
+        processEntry.dwSize = sizeof(PROCESSENTRY32);
+        
+        BOOL result = Process32First(snapshot, &processEntry);
+        while (result) {
+            int processId = processEntry.th32ProcessID;
+            char* processExecutableName = processEntry.szExeFile;
+            
+            char processFilePath[MAX_PATH];
+            char processUserName[256];
+            char processUserDomain[256];
+            
+            int processUserNameSize = sizeof(processUserName);
+            int processUserDomainSize = sizeof(processUserDomain);
+            
+            HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processEntry.th32ProcessID);
+            
+            char processFilePathNT[MAX_PATH];
+            if (GetProcessImageFileName(process, (LPSTR) &processFilePathNT, MAX_PATH)) {
+                convertNTPathToWin32Path(processFilePathNT, processFilePath);
+            } else {
+                sprintf(processFilePath, "ERROR(%d)", GetLastError());
+            }
+            
+            HANDLE processToken;
+            if (OpenProcessToken(process, TOKEN_READ, &processToken)) {
+                DWORD tokenUserSize = 0;
+                GetTokenInformation(processToken, TokenUser, NULL, 0, &tokenUserSize);
+                
+                if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
+                    PTOKEN_USER userToken = (PTOKEN_USER) malloc(tokenUserSize);
+                    
+                    if (GetTokenInformation(processToken, TokenUser, userToken, tokenUserSize, &tokenUserSize)) {
+                        SID_NAME_USE use;
+                        LookupAccountSid(NULL, userToken->User.Sid, processUserName, &processUserNameSize, processUserDomain, &processUserDomainSize, &use);
+                    }
+                    
+                    free(userToken);
+                }
+                
+                CloseHandle(processToken);
+            } else {
+                sprintf(processUserName, "ERROR(%d)", GetLastError());
+            }
+            
+            CloseHandle(process);
+            
+            char responseEntryFormat[] = "[pid=%d,name=\"%s\",path=\"%s\",user=\"%s\"]\n";
+            char responseEntry[512];
+            sprintf(responseEntry, responseEntryFormat, processId, processExecutableName, processFilePath, processUserName);
+            strcatd(&response, responseEntry);
+            
+            result = Process32Next(snapshot, &processEntry);
+        }
+        
+        CloseHandle(snapshot);
+        
+        return response;
+    } else if (strcmp(queryArgs, "threads") == 0) {
+        if (debugMode) {
+            printf("%d: Querying threads\n", cmdPipe);
+        }
+    } else if (strcmp(queryArgs, "windows") == 0) {
+        if (debugMode) {
+            printf("%d: Querying windows\n", cmdPipe);
+        }
     }
-    
-    // TODO: Query process
     
     return "ERROR UNKNOWN";
 }
