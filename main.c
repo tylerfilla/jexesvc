@@ -318,6 +318,7 @@ char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
             char processFilePath[MAX_PATH];
             char processUserName[256];
             char processUserDomain[256];
+            char processMemory[64];
             
             DWORD processUserNameSize = sizeof(processUserName);
             DWORD processUserDomainSize = sizeof(processUserDomain);
@@ -352,11 +353,19 @@ char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
                 sprintf(processUserName, "ERROR(%d)", GetLastError());
             }
             
+            PROCESS_MEMORY_COUNTERS memoryCounters;
+            memoryCounters.cb = sizeof(PROCESS_MEMORY_COUNTERS);
+            if (GetProcessMemoryInfo(process, &memoryCounters, memoryCounters.cb)) {
+                sprintf(processMemory, "%d>%d", memoryCounters.WorkingSetSize, memoryCounters.PeakWorkingSetSize);
+            } else {
+                sprintf(processMemory, "ERROR(%d)", GetLastError());
+            }
+            
             CloseHandle(process);
             
-            char responseEntryFormat[] = "[pid=%d,name=\"%s\",path=\"%s\",user=\"%s\"]\n";
+            char responseEntryFormat[] = "[pid=%d,name=\"%s\",path=\"%s\",user=\"%s\\%s\",memory=\"%s\"]\n";
             char responseEntry[512];
-            sprintf(responseEntry, responseEntryFormat, processId, processExecutableName, processFilePath, processUserName);
+            sprintf(responseEntry, responseEntryFormat, processId, processExecutableName, processFilePath, processUserDomain, processUserName, processMemory);
             strcatd(&response, responseEntry);
             
             result = Process32Next(snapshot, &processEntry);
