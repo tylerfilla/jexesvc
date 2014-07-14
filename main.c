@@ -332,9 +332,29 @@ char* commandKill(HANDLE cmdPipe, char* killArgs) {
         printf("%d: Kill: \"%s\"\n", cmdPipe, killArgs);
     }
     
-    // TODO: Kill process
+    int success = 0;
     
-    return "ERROR UNKNOWN";
+    char* end;
+    int processExitCode = (int) strtol(killArgs, &end, 10);
+    int processId = (int) strtol(end, NULL, 10);
+    
+    HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, processId);
+    
+    if (TerminateProcess(process, processExitCode)) {
+        if (debugMode) {
+            printf("%d: Successfully terminated process %d with exit code %d\n", cmdPipe, processId, processExitCode);
+        }
+        
+        success = 1;
+    }
+    
+    CloseHandle(process);
+    
+    if (success) {
+        return "SUCCESS";
+    } else {
+        return "FAIL";
+    }
 }
 
 char* commandQuery(HANDLE cmdPipe, char* queryArgs) {
