@@ -99,7 +99,7 @@ void convertNTPathToWin32Path(char* pathNT, char* pathWin32) {
         if (strlen(dosTargetPath) > 0 && strstart(pathNT, dosTargetPath)) {
             char pathTmp[strlen(pathNT) - strlen(dosTargetPath) + 1];
             strsub(pathNT, pathTmp, strlen(dosTargetPath), strlen(pathNT));
-            sprintf(pathWin32, "%s%s", strupr(dosDrive), pathTmp);
+            sprintf(pathWin32, "%s%s", dosDrive, pathTmp);
             
             break;
         }
