@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* File Functions */
+
 char* readLine(HANDLE handle) {
     size_t lenmax = 64;
     size_t len = lenmax;
@@ -50,6 +52,8 @@ void writeLine(HANDLE handle, char* line) {
     FlushFileBuffers(handle);
 }
 
+/* String Functions */
+
 void strcatd(char** str, const char* append) {
     if (*str != NULL && append == NULL) {
         free(*str);
@@ -88,6 +92,8 @@ void strsub(char* str, char* sub, int begin, int end) {
         sub[i++] = str[j];
     }
 }
+
+/* Miscellaneous Functions */
 
 void convertNTPathToWin32Path(char* pathNT, char* pathWin32) {
     char dosTargetPath[64];

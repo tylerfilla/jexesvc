@@ -322,7 +322,54 @@ char* commandExec(HANDLE cmdPipe, char* execArgs) {
         printf("%d: Execute: \"%s\"\n", cmdPipe, execArgs);
     }
     
-    // TODO: Execute process
+    char authString[128];
+    char startingDirectory[MAX_PATH];
+    char envString[128];
+    char redirectFlagString[1];
+    char command[MAX_PATH];
+    
+    char* authStringIndex = authString;
+    char* startingDirectoryIndex = startingDirectory;
+    char* envStringIndex = envString;
+    char* redirectFlagStringIndex = redirectFlagString;
+    char* commandIndex = command;
+    
+    int index = 0;
+    int quote = 0;
+    
+    for (int i = 0; i < strlen(execArgs); i++) {
+        char c = execArgs[i];
+        
+        if (c == '"') {
+            quote = !quote;
+        } else if (c == ' ' && !quote) {
+            index++;
+        } else {
+            switch (index) {
+            case 0:
+                *(authStringIndex++) = c;
+                break;
+            case 1:
+                *(startingDirectoryIndex++) = c;
+                break;
+            case 2:
+                *(envStringIndex++) = c;
+                break;
+            case 3:
+                *(redirectFlagStringIndex++) = c;
+                break;
+            case 4:
+                *(commandIndex++) = c;
+                break;
+            }
+        }
+    }
+    
+    *authStringIndex = '\0';
+    *startingDirectoryIndex = '\0';
+    *envStringIndex = '\0';
+    *redirectFlagStringIndex = '\0';
+    *commandIndex = '\0';
     
     return "ERROR UNKNOWN";
 }
