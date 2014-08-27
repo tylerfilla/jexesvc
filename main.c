@@ -322,7 +322,9 @@ char* commandExec(HANDLE cmdPipe, char* execArgs) {
         printf("%d: Execute: \"%s\"\n", cmdPipe, execArgs);
     }
     
-    char authString[128];
+    /* Split and Store Arguments */
+    
+    char authString[194];
     char startingDirectory[MAX_PATH];
     char envString[128];
     char redirectFlagString[1];
@@ -370,6 +372,14 @@ char* commandExec(HANDLE cmdPipe, char* execArgs) {
     *envStringIndex = '\0';
     *redirectFlagStringIndex = '\0';
     *commandIndex = '\0';
+    
+    /* Process Creation */
+    
+    if (strcmp(authString, "null") == 0) {
+        // TODO: Create process without authentication
+    } else {
+        // TODO: Create process with authentication
+    }
     
     return "ERROR UNKNOWN";
 }
